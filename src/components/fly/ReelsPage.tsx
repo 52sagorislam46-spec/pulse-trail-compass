@@ -821,7 +821,7 @@ export function ReelsPage({
       </header>
 
       <div className="absolute top-14 left-0 right-0 z-10">
-        <TagFilterBar tags={tags} active={tag} onChange={setTag} dark />
+        <TagFilterBar tags={tags} active={tag} onChange={setTag} dark trending={trending} />
       </div>
 
       {(pull > 0 || refreshing) && (
