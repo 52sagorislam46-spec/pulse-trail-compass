@@ -113,7 +113,7 @@ function Feed({
       </header>
       <StoriesBar />
       <LiveNowStrip />
-      <div className="hidden flex gap-2 px-4 pt-2">
+      <div className="hidden gap-2 px-4 pt-2">
         {(["foryou", "latest"] as const).map((m) => (
           <button
             key={m}
