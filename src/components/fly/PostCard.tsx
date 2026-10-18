@@ -20,6 +20,7 @@ import { db, secureUrl } from "../../lib/firebase";
 import { timeAgo } from "../../lib/time";
 import { Avatar } from "./Avatar";
 import { formatViews, registerView } from "./views";
+import { recordLike } from "./recommend";
 import { useAuth } from "./AuthContext";
 import type { Comment, Post } from "./types";
 import { ShareSheet } from "./ShareSheet";
@@ -327,6 +328,7 @@ export function PostCard({
 
   const toggleLike = async () => {
     if (!user) return;
+    recordLike(post, !liked);
     await updateDoc(ref, {
       likes: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
     });

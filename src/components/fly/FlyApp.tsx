@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { rankForYou, stableAppend, trendingTags, viralIds } from "./recommend";
 import { AD_CONFIG, BannerAd, InterstitialHost } from "./ads";
 import { Bell, Bird, Loader2, Pause, Search } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
@@ -49,13 +50,26 @@ function Feed({
 }) {
   const { posts, loading, loadingMore, hasMore, loadMore, refresh } =
     usePosts();
+  const { user, profile } = useAuth();
   const [tag, setTag] = useState<string | null>(null);
+  const [feedMode, setFeedMode] = useState<"foryou" | "latest">("foryou");
+  const orderRef = useRef<string[]>([]);
   const tags = collectTags(posts);
+  const trending = useMemo(() => trendingTags(posts), [posts]);
+  const viral = useMemo(() => viralIds(posts), [posts]);
+  const orderedPosts = useMemo(() => {
+    if (feedMode === "latest") return posts;
+    const ranked = stableAppend(orderRef.current, rankForYou(posts, user?.uid, profile?.following ?? []));
+    orderRef.current = ranked.map((p) => p.id);
+    return ranked;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts, feedMode]);
   const sponsored = useBoostPosts("approved");
-  const visiblePosts = tag ? filterByTag(posts, tag) : mixSponsored(posts, sponsored ?? []);
+  const visiblePosts = tag ? filterByTag(orderedPosts, tag) : mixSponsored(orderedPosts, sponsored ?? []);
 
   const refreshFeed = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
+    orderRef.current = [];
     void refresh();
   };
 
@@ -99,7 +113,23 @@ function Feed({
       </header>
       <StoriesBar />
       <LiveNowStrip />
-      <TagFilterBar tags={tags} active={tag} onChange={setTag} />
+      <div className="flex gap-2 px-4 pt-2">
+        {(["foryou", "latest"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => {
+              orderRef.current = [];
+              setFeedMode(m);
+            }}
+            className={`h-8 px-3 rounded-full text-xs font-semibold ${
+              feedMode === m ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-600 border border-gray-100"
+            }`}
+          >
+            {m === "foryou" ? "✨ For You" : "Latest"}
+          </button>
+        ))}
+      </div>
+      <TagFilterBar tags={tags} active={tag} onChange={setTag} trending={trending} />
       {loading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="animate-spin text-sky-500" />
@@ -112,6 +142,9 @@ function Feed({
         <>
           {visiblePosts.map((p, i) => (
             <div key={p.id}>
+              {viral.has(p.id) && (
+                <div className="px-4 pt-3 text-xs font-bold text-orange-500">🔥 Viral now</div>
+              )}
               <PostCard
                 post={p}
                 onOpenProfile={onOpenProfile}

@@ -9,6 +9,7 @@ import { formatViews, registerView } from "./views";
 import { useAuth } from "./AuthContext";
 import { useReels } from "./usePosts";
 import { TagFilterBar, collectTags, filterByTag } from "./TagFilterBar";
+import { rankForYou, recordLike, recordWatch, stableAppend, trendingTags } from "./recommend";
 import { CommentItem } from "./PostCard";
 import { fetchProfile, sendMessage } from "./chat";
 import { timeAgo } from "../../lib/time";
@@ -168,24 +169,37 @@ function Reel({
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+    let watchStart: number | null = null;
+    const flushWatch = () => {
+      if (watchStart != null) {
+        recordWatch(post, Date.now() - watchStart);
+        watchStart = null;
+      }
+    };
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry && entry.isIntersecting && entry.intersectionRatio > 0.6) {
           el.play().catch(() => {});
           registerView(post.id);
           onReelSeen();
+          if (watchStart == null) watchStart = Date.now();
         } else {
           el.pause();
+          flushWatch();
         }
       },
       { threshold: [0, 0.6, 1] },
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      flushWatch();
+    };
   }, [post.id]);
 
   const toggleLike = async () => {
     if (!user) return;
+    recordLike(post, !liked);
     await updateDoc(ref, {
       likes: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
     });
@@ -695,14 +709,21 @@ export function ReelsPage({
     () => allReelsRaw.filter((p) => secureUrl(p.mediaUrl)),
     [allReelsRaw],
   );
-  const tabReels = useMemo(
-    () =>
-      tab === "friends" && profile
-        ? allReels.filter((p) => profile.following.includes(p.authorId))
-        : allReels,
-    [allReels, tab, profile],
-  );
+  const reelOrderRef = useRef<string[]>([]);
+  const tabReels = useMemo(() => {
+    if (tab === "friends" && profile)
+      return allReels.filter((p) => profile.following.includes(p.authorId));
+    // "For You": rank by watch-time, likes & interests; never reshuffle reels already shown.
+    const ranked = stableAppend(
+      reelOrderRef.current,
+      rankForYou(allReels, profile?.uid, profile?.following ?? []),
+    );
+    reelOrderRef.current = ranked.map((p) => p.id);
+    return ranked;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allReels, tab]);
   const tags = useMemo(() => collectTags(tabReels), [tabReels]);
+  const trending = useMemo(() => trendingTags(allReels), [allReels]);
   const reels = useMemo(() => filterByTag(tabReels, tag), [tabReels, tag]);
 
   // Jump to the reel that was clicked on the timeline.
@@ -800,7 +821,7 @@ export function ReelsPage({
       </header>
 
       <div className="absolute top-14 left-0 right-0 z-10">
-        <TagFilterBar tags={tags} active={tag} onChange={setTag} dark />
+        <TagFilterBar tags={tags} active={tag} onChange={setTag} dark trending={trending} />
       </div>
 
       {(pull > 0 || refreshing) && (

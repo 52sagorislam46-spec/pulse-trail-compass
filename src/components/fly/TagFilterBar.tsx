@@ -20,13 +20,18 @@ export function TagFilterBar({
   active,
   onChange,
   dark = false,
+  trending = [],
 }: {
   tags: string[];
   active: string | null;
   onChange: (tag: string | null) => void;
   dark?: boolean;
+  /** Auto-detected trending hashtags — shown first with a 🔥 mark. */
+  trending?: string[];
 }) {
   if (tags.length === 0) return null;
+  const hot = new Set(trending);
+  const ordered = [...trending.filter((t) => tags.includes(t)), ...tags.filter((t) => !hot.has(t))];
   const base =
     "shrink-0 h-8 px-3 rounded-full text-xs font-semibold transition-colors";
   const idle = dark
@@ -46,13 +51,13 @@ export function TagFilterBar({
       >
         All
       </button>
-      {tags.map((t) => (
+      {ordered.map((t) => (
         <button
           key={t}
           onClick={() => onChange(active === t ? null : t)}
           className={`${base} ${active === t ? on : idle}`}
         >
-          #{t}
+          {hot.has(t) ? "🔥 " : ""}#{t}
         </button>
       ))}
     </div>
